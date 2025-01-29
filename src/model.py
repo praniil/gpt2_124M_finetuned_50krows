@@ -11,7 +11,7 @@ dataset_3 = load_dataset("Amod/mental_health_counseling_conversations")
 dataset_4 = load_dataset("jkhedri/psychology-dataset")
 dataset_5 = load_dataset("samhog/psychology-6k")
 dataset_6 = load_dataset("RAJJ18/mental_health_dataset")
-dataset_6_selected = dataset_6["train"].shuffle(seed=42).select(range(8000))
+dataset_6_selected = dataset_6["train"].shuffle(seed=42).select(range(3000))
 
 #making the column name uniform
 dataset_1 = dataset_1.rename_columns({
@@ -58,8 +58,8 @@ tokenizer = AutoTokenizer.from_pretrained('gpt2')
 tokenizer.pad_token = tokenizer.eos_token
 
 def tokenize_function(examples):
-    inputs = tokenizer(examples['input'], truncation=True, padding='max_length', max_length=512)
-    outputs = tokenizer(examples['output'], truncation=True, padding='max_length', max_length=512)
+    inputs = tokenizer(examples['input'], truncation=True, padding='max_length', max_length=256)
+    outputs = tokenizer(examples['output'], truncation=True, padding='max_length', max_length=256)
     
     inputs['labels'] = outputs['input_ids'] 
     return inputs
@@ -85,10 +85,23 @@ print(len(combined_tokenized_dataset))
 
 
 #finetuning the model
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Check if CUDA is available
+cuda_available = torch.cuda.is_available()
+print(f"CUDA Available: {cuda_available}")
+
+device = torch.device("cuda" if cuda_available else "cpu")
 print(f"Using device: {device}")
 
+# If CUDA is available, print the GPU name
+if cuda_available:
+    current_device = torch.cuda.current_device()
+    device_name = torch.cuda.get_device_name(current_device)
+    print(f"Current CUDA device: {device_name}")
+else:
+    print("Using CPU instead.")
+
 model = AutoModelForCausalLM.from_pretrained('gpt2')
+model.to(device)
 
 #training argument define
 training_args = TrainingArguments(
@@ -97,14 +110,15 @@ training_args = TrainingArguments(
     save_steps = 500,         # Save checkpoints every 500 steps
     eval_steps = 500,         # Evaluate every 500 steps
     num_train_epochs = 7,
-    per_device_train_batch_size = 4,
-    per_device_eval_batch_size = 4,
+    per_device_train_batch_size = 1,
+    per_device_eval_batch_size = 1,
     warmup_steps = 100,
     weight_decay = 0.01,
     logging_dir = './logs',
     report_to = 'none',
     learning_rate = 3e-5,     # Use a lower learning rate for fine-tuning
     logging_steps = 50,       # Log training progress every 50 steps
+    fp16=True  # Use mixed precision training
 )
 
 #initialize trainer
@@ -117,7 +131,7 @@ trainer = Trainer(
 )
 
 #train the model
-trainer.train()
+trainer.train(resume_from_checkpoint='/home/pranil/python_projects/gpt2_finetuned/results/checkpoint-17500')
 
 model_output_dir = '/home/pranil/python_projects/gpt2_finetuned/results/model'
 #create the directory if it doesnot exist
